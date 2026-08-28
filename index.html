@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0e0f11" />
+    <title>67 — binary language workstation</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./src/ui/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">67</div>
+      <nav class="actions">
+        <button id="btn-run" class="accent" accesskey="r">Run</button>
+        <button id="btn-stop" disabled accesskey="s">Stop</button>
+        <button id="btn-save" accesskey="v">Save</button>
+        <span class="sep"></span>
+        <button id="btn-new">New</button>
+        <button id="btn-import">Import</button>
+        <button id="btn-export">Export</button>
+        <button id="btn-download">Download .67</button>
+        <span class="sep"></span>
+        <button id="btn-examples">Examples</button>
+        <button id="btn-inspect">Inspector</button>
+        <button id="btn-docs">Docs</button>
+        <button id="btn-settings">Settings</button>
+      </nav>
+    </header>
+
+    <main class="workbench">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-head">
+          <span>Files</span>
+          <button id="btn-add-file" title="new file">+</button>
+        </div>
+        <ul id="file-list" class="file-list"></ul>
+        <div class="sidebar-foot">
+          <span id="file-count">0 files</span>
+        </div>
+      </aside>
+
+      <section class="editor-pane">
+        <div class="pane-head">
+          <span id="editor-title" class="mono">main.67</span>
+          <span id="editor-meta" class="meta"></span>
+        </div>
+        <div class="editor-wrap" id="editor-wrap">
+          <pre id="gutter" class="gutter mono" aria-hidden="true"></pre>
+          <textarea
+            id="editor"
+            class="editor mono"
+            spellcheck="false"
+            autocomplete="off"
+            autocapitalize="off"
+            wrap="off"
+            aria-label="67 binary source editor"
+          ></textarea>
+        </div>
+        <div class="status-line" id="status-line">Ready · 67 runtime</div>
+      </section>
+
+      <section class="right-pane" id="right-pane" hidden>
+        <div class="pane-head">
+          <span id="right-title">Inspector</span>
+          <button id="btn-close-right">×</button>
+        </div>
+        <div id="right-body" class="right-body mono"></div>
+      </section>
+    </main>
+
+    <section class="terminal-pane">
+      <div class="pane-head">
+        <span>Terminal</span>
+        <div class="term-tabs">
+          <span id="tab-stdout" class="term-tab active">stdout</span>
+          <span id="tab-stderr" class="term-tab">stderr</span>
+          <button id="btn-clear-term">clear</button>
+        </div>
+      </div>
+      <pre id="terminal" class="terminal mono"></pre>
+      <div class="term-input-row" id="term-input-row" hidden>
+        <span class="prompt">?</span>
+        <input id="term-input" class="term-input mono" type="text" />
+      </div>
+    </section>
+
+    <input type="file" id="file-input" accept=".67,.json" hidden multiple />
+
+    <div id="modal-overlay" class="modal-overlay" hidden>
+      <div class="modal">
+        <div class="modal-head">
+          <span id="modal-title">Examples</span>
+          <button id="modal-close">×</button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <script type="module" src="./src/ui/main.ts"></script>
+  </body>
+</html>

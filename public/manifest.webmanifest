@@ -1,0 +1,17 @@
+{
+  "name": "67 — binary language workstation",
+  "short_name": "67",
+  "description": "A programming language whose source alphabet contains only 6 (binary 0) and 7 (binary 1).",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0e0f11",
+  "theme_color": "#0e0f11",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
