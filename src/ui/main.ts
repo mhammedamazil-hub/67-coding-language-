@@ -356,7 +356,161 @@ function escapeHtml(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Modals
+// AI Builder
+// ---------------------------------------------------------------------------
+// AI Assistant Chat
+interface ChatMessage { role: 'user' | 'ai'; content: string; }
+let chatHistory: ChatMessage[] = [];
+
+function showAIChat(): void {
+  const pane = $<HTMLElement>('right-pane');
+  $<HTMLSpanElement>('right-title').textContent = 'AI Assistant';
+  pane.hidden = false;
+  
+  const body = $<HTMLDivElement>('right-body');
+  body.innerHTML = `
+    <div style="display:flex; flex-direction:column; height:100%;">
+      <div id="ai-chat-history" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-bottom:10px; padding-right:4px;"></div>
+      <div style="display:flex; flex-direction:column; gap:6px; flex-shrink:0;">
+         <textarea id="ai-chat-input" placeholder="Ask AI to write code or explain..." style="width:100%; min-height:60px; background:var(--bg-input); color:var(--text); border:1px solid var(--border); padding:8px; font-family:inherit; resize:vertical;"></textarea>
+         <button id="btn-ai-send" class="accent" style="padding:6px 12px; cursor:pointer;">Send</button>
+      </div>
+    </div>
+  `;
+  
+  const input = $<HTMLTextAreaElement>('ai-chat-input');
+  const btn = $<HTMLButtonElement>('btn-ai-send');
+  
+  const renderHistory = () => {
+    const container = $('ai-chat-history');
+    if (!container) return;
+    container.innerHTML = chatHistory.length === 0 ? '<div style="color:var(--text-faint);text-align:center;margin-top:20px;">No messages yet. Ask me to write a 67 program!</div>' : chatHistory.map(m => {
+        const bg = m.role === 'user' ? 'var(--bg-input)' : 'var(--bg-panel)';
+        const border = m.role === 'user' ? 'var(--border)' : 'var(--ok)';
+        const name = m.role === 'user' ? 'You' : 'AI';
+        return `<div style="background:${bg}; border:1px solid ${border}; padding:8px; border-radius:4px;">
+           <strong style="color:var(--accent)">${name}</strong>
+           <pre style="white-space:pre-wrap; font-family:inherit; font-size:12px; margin:6px 0 0;">${escapeHtml(m.content)}</pre>
+        </div>`;
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+  };
+  
+  renderHistory();
+  
+  btn.onclick = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    input.disabled = true;
+    btn.disabled = true;
+    
+    chatHistory.push({ role: 'user', content: text });
+    renderHistory();
+    
+    try {
+      await handleAIChatRequest(text, renderHistory);
+    } catch (err) {
+      chatHistory.push({ role: 'ai', content: '❌ Error: ' + (err instanceof Error ? err.message : String(err)) });
+      renderHistory();
+    } finally {
+      input.disabled = false;
+      btn.disabled = false;
+      input.focus();
+    }
+  };
+  
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      btn.click();
+    }
+  };
+}
+
+async function handleAIChatRequest(newPrompt: string, renderCb: () => void): Promise<void> {
+  const provider = settings.aiProvider || 'openai';
+  const model = settings.aiModel || (provider === 'openai' ? 'gpt-4o' : 'gemini-1.5-pro');
+  
+  if (provider === 'openai' && !settings.openaiKey) throw new Error('OpenAI API key missing in Settings.');
+  if (provider === 'gemini' && !settings.geminiKey) throw new Error('Gemini API key missing in Settings.');
+  
+  const systemPrompt = "You are an expert compiler engineer and AI assistant for the '67' esoteric language workstation.\n" +
+  "The user is working in an editor that accepts ONLY pure binary 6/7 streams. YOU CANNOT OUTPUT BINARY.\n" +
+  "Instead, when asked to write or modify code, you must output a complete Javascript script using the `ModuleBuilder` API, enclosed in a ```javascript code block.\n" +
+  "The workstation will automatically extract, execute, and compile your script, replacing the user's active file with the resulting binary stream.\n" +
+  "DO NOT call builder.build() or try to export. The host does this.\n" +
+  "API usage example:\n" +
+  "builder.root.loadStr('Hello!');\n" +
+  "builder.root.callBuiltin('print', 1);\n" +
+  "builder.root.null();\n" +
+  "builder.root.return();\n" +
+  "Available builtins: print, write, input, typeof, toString, toNumber, toInt, toFloat, length, to67, from67, binary, decimal, abs, min, max, sqrt, floor, ceil, round, random, pow, push, pop, shift, join, slice, indexOf, includes, reverse, map, filter, reduce, upper, lower, split, repeat, startsWith, endsWith, contains, charCode, fromCharCode, trim, keys, values, has, assert, assertEq, error, isInt, array\n" +
+  "Root instructions: constInt(bigint), constStr(string), constFloat(number), loadInt(bigint), loadStr(string), loadFloat(number), loadConst(idx), true(), false(), null(), local(name), slot(name), loadLocal(name), storeLocal(name), add(), sub(), mul(), div(), mod(), pow(), bitAnd(), bitOr(), bitXor(), shl(), shr(), ushr(), eq(), notEq(), lt(), lte(), gt(), gte(), not(), neg(), bitNot(), jumpIfFalse(label), jumpIfTrue(label), jump(label), label(name), callBuiltin(name, argCount), return()";
+  
+  let aiResponse = '';
+  
+  if (provider === 'openai') {
+    const messages = [{ role: 'system', content: systemPrompt }];
+    for (const m of chatHistory) {
+      if (m.content === newPrompt && m.role === 'user' && m === chatHistory[chatHistory.length - 1]) continue;
+      messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content });
+    }
+    messages.push({ role: 'user', content: newPrompt });
+    
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + settings.openaiKey },
+      body: JSON.stringify({ model, messages, temperature: 0.2 })
+    });
+    if (!res.ok) throw new Error((await res.json()).error?.message || res.statusText);
+    aiResponse = (await res.json()).choices[0].message.content.trim();
+  } else {
+    const contents = [];
+    for (const m of chatHistory) {
+      if (m.content === newPrompt && m.role === 'user' && m === chatHistory[chatHistory.length - 1]) continue;
+      contents.push({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] });
+    }
+    contents.push({ role: 'user', parts: [{ text: newPrompt }] });
+    
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: { text: systemPrompt } },
+        contents,
+        generationConfig: { temperature: 0.2 }
+      })
+    });
+    if (!res.ok) throw new Error((await res.json()).error?.message || res.statusText);
+    aiResponse = (await res.json()).candidates[0].content.parts[0].text.trim();
+  }
+  
+  const codeMatch = aiResponse.match(/```(?:javascript|js|typescript|ts)?\n([\s\S]*?)```/);
+  if (codeMatch) {
+    const code = codeMatch[1].trim();
+    try {
+      const builder = new ModuleBuilder(state.current.replace('.67', ''));
+      const runAI = new Function('builder', code);
+      runAI(builder);
+      const stream = moduleToStream(builder.build());
+      
+      editor.value = stream;
+      saveCurrent();
+      runValidation();
+      renderGutter();
+      
+      chatHistory.push({ role: 'ai', content: aiResponse + '\n\n✅ Applied compiled binary to active file.' });
+    } catch (e) {
+      chatHistory.push({ role: 'ai', content: aiResponse + '\n\n❌ Compiler error while applying: ' + (e instanceof Error ? e.message : String(e)) });
+    }
+  } else {
+    chatHistory.push({ role: 'ai', content: aiResponse });
+  }
+  
+  renderCb();
+}
+
 const overlay = $<HTMLDivElement>('modal-overlay');
 function openModal(title: string, bodyHtml: string): void {
   $<HTMLSpanElement>('modal-title').textContent = title;
@@ -421,12 +575,30 @@ function showSettings(): void {
     <label style="display:block;margin:8px 0">Editor font size (px)
       <input id="set-font" type="number" min="10" max="24" value="${settings.fontSize}" style="width:80px;margin-left:8px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:3px 6px"/>
     </label>
+    <div style="margin:8px 0;border-top:1px solid var(--border);padding-top:8px">
+      <label style="display:block;margin-bottom:6px">AI Provider
+        <select id="set-provider" style="margin-left:8px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:3px 6px">
+          <option value="openai" ${settings.aiProvider === 'openai' ? 'selected' : ''}>OpenAI</option>
+          <option value="gemini" ${settings.aiProvider === 'gemini' ? 'selected' : ''}>Gemini</option>
+        </select>
+      </label>
+      <label style="display:block;margin-bottom:6px">AI Model
+        <select id="set-model" style="margin-left:8px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:3px 6px"></select>
+      </label>
+      <label style="display:block;margin-bottom:6px">OpenAI API Key
+        <input id="set-openai" type="password" placeholder="sk-..." value="${settings.openaiKey || ''}" style="width:100%;margin-top:4px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:4px 6px"/>
+      </label>
+      <label style="display:block;margin-bottom:6px">Gemini API Key
+        <input id="set-gemini" type="password" placeholder="AIzaSy..." value="${settings.geminiKey || ''}" style="width:100%;margin-top:4px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:4px 6px"/>
+      </label>
+    </div>
     <div class="d" style="color:var(--text-faint);margin-top:12px">
       Runtime limits: ${LIMITS.maxInstructions.toLocaleString()} instructions,
       ${LIMITS.maxCallDepth} call depth,
       ${(LIMITS.maxOutputBytes / 1024).toFixed(0)} KiB output cap.
     </div>`,
   );
+  
   $<HTMLInputElement>('set-wrap').oninput = (e) => {
     settings.wrapWidth = Number((e.target as HTMLInputElement).value) || 64;
     saveSettings(settings);
@@ -437,6 +609,46 @@ function showSettings(): void {
     settings.fontSize = Number((e.target as HTMLInputElement).value) || 14;
     saveSettings(settings);
     renderGutter();
+  };
+  
+  const updateModels = () => {
+    const prov = $<HTMLSelectElement>('set-provider').value;
+    const mod = $<HTMLSelectElement>('set-model');
+    mod.innerHTML = '';
+    const opts = prov === 'openai' ? ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'] : ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash-exp'];
+    opts.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o;
+      opt.textContent = o;
+      if (settings.aiModel === o) opt.selected = true;
+      mod.appendChild(opt);
+    });
+    if (!opts.includes(settings.aiModel || '')) {
+      settings.aiModel = opts[0];
+      saveSettings(settings);
+    }
+  };
+  
+  $<HTMLSelectElement>('set-provider').onchange = (e) => {
+    settings.aiProvider = (e.target as HTMLSelectElement).value as 'openai' | 'gemini';
+    saveSettings(settings);
+    updateModels();
+  };
+  
+  $<HTMLSelectElement>('set-model').onchange = (e) => {
+    settings.aiModel = (e.target as HTMLSelectElement).value;
+    saveSettings(settings);
+  };
+  
+  updateModels();
+
+  $<HTMLInputElement>('set-openai').oninput = (e) => {
+    settings.openaiKey = (e.target as HTMLInputElement).value.trim();
+    saveSettings(settings);
+  };
+  $<HTMLInputElement>('set-gemini').oninput = (e) => {
+    settings.geminiKey = (e.target as HTMLInputElement).value.trim();
+    saveSettings(settings);
   };
 }
 
@@ -534,6 +746,7 @@ function bindUI(): void {
   $<HTMLButtonElement>('btn-export').onclick = exportProject;
   $<HTMLButtonElement>('btn-download').onclick = downloadFile;
   $<HTMLButtonElement>('btn-examples').onclick = showExamples;
+  $<HTMLButtonElement>('btn-ai').onclick = showAIChat;
   $<HTMLButtonElement>('btn-inspect').onclick = showInspector;
   $<HTMLButtonElement>('btn-docs').onclick = showDocs;
   $<HTMLButtonElement>('btn-settings').onclick = showSettings;
