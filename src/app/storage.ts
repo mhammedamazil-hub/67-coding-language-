@@ -127,16 +127,20 @@ export class ProjectStorage {
 export interface Settings {
   wrapWidth: number;
   fontSize: number;
+  openaiKey?: string;
+  geminiKey?: string;
+  aiProvider?: 'openai' | 'gemini';
+  aiModel?: string;
 }
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { wrapWidth: 64, fontSize: 14, ...(JSON.parse(raw) as Partial<Settings>) };
+    if (raw) return { wrapWidth: 64, fontSize: 14, aiProvider: 'openai', ...(JSON.parse(raw) as Partial<Settings>) };
   } catch {
     // ignore
   }
-  return { wrapWidth: 64, fontSize: 14 };
+  return { wrapWidth: 64, fontSize: 14, aiProvider: 'openai' };
 }
 
 export function saveSettings(s: Settings): void {
