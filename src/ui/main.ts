@@ -359,6 +359,35 @@ function escapeHtml(s: string): string {
 // AI Builder
 // ---------------------------------------------------------------------------
 // AI Assistant Chat
+// Model catalog for the AI Builder. `id` values are the exact API model
+// identifiers expected by each provider (gemini-1.5-* and gemini-2.0-* were
+// retired by Google, so they are intentionally absent).
+const AI_MODELS: Record<'openai' | 'gemini', Array<{ id: string; label: string }>> = {
+  openai: [
+    { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol (flagship)' },
+    { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra (balanced)' },
+    { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna (low cost)' },
+    { id: 'gpt-4o', label: 'GPT-4o (legacy)' },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini (legacy)' },
+  ],
+  gemini: [
+    { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash (latest)' },
+    { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
+    { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro' },
+    { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' },
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
+  ],
+};
+const DEFAULT_AI_MODEL: Record<'openai' | 'gemini', string> = {
+  openai: AI_MODELS.openai[0].id,
+  gemini: AI_MODELS.gemini[0].id,
+};
+
 interface ChatMessage { role: 'user' | 'ai'; content: string; }
 let chatHistory: ChatMessage[] = [];
 
@@ -430,7 +459,11 @@ function showAIChat(): void {
 
 async function handleAIChatRequest(newPrompt: string, renderCb: () => void): Promise<void> {
   const provider = settings.aiProvider || 'openai';
-  const model = settings.aiModel || (provider === 'openai' ? 'gpt-4o' : 'gemini-1.5-pro');
+  // Use the saved model only if it is still offered; otherwise fall back to the
+  // provider default (covers retired models persisted in old settings).
+  const model = AI_MODELS[provider].some((m) => m.id === settings.aiModel)
+    ? (settings.aiModel as string)
+    : DEFAULT_AI_MODEL[provider];
   
   if (provider === 'openai' && !settings.openaiKey) throw new Error('OpenAI API key missing in Settings.');
   if (provider === 'gemini' && !settings.geminiKey) throw new Error('Gemini API key missing in Settings.');
@@ -483,7 +516,12 @@ async function handleAIChatRequest(newPrompt: string, renderCb: () => void): Pro
       })
     });
     if (!res.ok) throw new Error((await res.json()).error?.message || res.statusText);
-    aiResponse = (await res.json()).candidates[0].content.parts[0].text.trim();
+    const data = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    aiResponse = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((p) => p.text ?? '')
+      .join('')
+      .trim();
+    if (!aiResponse) throw new Error('Gemini returned an empty response.');
   }
   
   const codeMatch = aiResponse.match(/```(?:javascript|js|typescript|ts)?\n([\s\S]*?)```/);
@@ -612,19 +650,19 @@ function showSettings(): void {
   };
   
   const updateModels = () => {
-    const prov = $<HTMLSelectElement>('set-provider').value;
+    const prov = $<HTMLSelectElement>('set-provider').value as 'openai' | 'gemini';
     const mod = $<HTMLSelectElement>('set-model');
     mod.innerHTML = '';
-    const opts = prov === 'openai' ? ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'] : ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash-exp'];
-    opts.forEach(o => {
+    const opts = AI_MODELS[prov];
+    opts.forEach(({ id, label }) => {
       const opt = document.createElement('option');
-      opt.value = o;
-      opt.textContent = o;
-      if (settings.aiModel === o) opt.selected = true;
+      opt.value = id;
+      opt.textContent = label;
+      if (settings.aiModel === id) opt.selected = true;
       mod.appendChild(opt);
     });
-    if (!opts.includes(settings.aiModel || '')) {
-      settings.aiModel = opts[0];
+    if (!opts.some((o) => o.id === settings.aiModel)) {
+      settings.aiModel = DEFAULT_AI_MODEL[prov];
       saveSettings(settings);
     }
   };
