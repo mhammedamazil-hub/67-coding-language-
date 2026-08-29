@@ -29,7 +29,8 @@
       </nav>
     </header>
 
-    <main class="workbench">
+    <div class="workspace" id="workspace">
+    <main class="workbench" id="workbench">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-head">
           <span>Files</span>
@@ -40,8 +41,9 @@
           <span id="file-count">0 files</span>
         </div>
       </aside>
+      <div class="split-v" id="split-sidebar" role="separator" aria-orientation="vertical" aria-label="Resize files panel" tabindex="0"></div>
 
-      <section class="editor-pane">
+      <section class="editor-pane" id="editor-pane">
         <div class="pane-head">
           <span id="editor-title" class="mono">main.67</span>
           <span id="editor-meta" class="meta"></span>
@@ -60,6 +62,7 @@
         </div>
         <div class="status-line" id="status-line">Ready · 67 runtime</div>
       </section>
+      <div class="split-v" id="split-right" role="separator" aria-orientation="vertical" aria-label="Resize inspector panel" tabindex="0" hidden></div>
 
       <section class="right-pane" id="right-pane" hidden>
         <div class="pane-head">
@@ -69,8 +72,9 @@
         <div id="right-body" class="right-body mono"></div>
       </section>
     </main>
+    <div class="split-h" id="split-term" role="separator" aria-orientation="horizontal" aria-label="Resize terminal" tabindex="0"></div>
 
-    <section class="terminal-pane">
+    <section class="terminal-pane" id="terminal-pane">
       <div class="pane-head">
         <span>Terminal</span>
         <div class="term-tabs">
@@ -85,6 +89,7 @@
         <input id="term-input" class="term-input mono" type="text" />
       </div>
     </section>
+    </div>
 
     <input type="file" id="file-input" accept=".67,.json" hidden multiple />
 

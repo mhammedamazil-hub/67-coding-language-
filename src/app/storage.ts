@@ -131,6 +131,9 @@ export interface Settings {
   geminiKey?: string;
   aiProvider?: 'openai' | 'gemini';
   aiModel?: string;
+  sidebarWidth?: number;
+  rightWidth?: number;
+  terminalHeight?: number;
 }
 
 export function loadSettings(): Settings {

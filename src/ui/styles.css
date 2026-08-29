@@ -20,6 +20,7 @@
 html, body {
   margin: 0;
   height: 100%;
+  height: 100dvh;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -34,11 +35,13 @@ html, body {
   display: flex;
   align-items: center;
   gap: 16px;
-  height: 40px;
-  padding: 0 12px;
+  min-height: 40px;
+  height: auto;
+  padding: 4px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
   user-select: none;
+  flex-shrink: 0;
 }
 .brand {
   font-family: var(--mono);
@@ -69,20 +72,67 @@ button.accent { border-color: var(--accent-dim); color: var(--accent); }
 button.accent:hover:not(:disabled) { border-color: var(--accent); }
 .sep { width: 1px; height: 18px; background: var(--border); margin: 0 6px; }
 
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* ---------- workbench layout ---------- */
 .workbench {
-  display: grid;
-  grid-template-columns: 160px 1fr auto;
-  height: calc(100vh - 40px - 180px);
-  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  min-height: 80px;
+  overflow: hidden;
+}
+
+.split-v, .split-h {
+  flex: 0 0 8px;
+  background: var(--border);
+  position: relative;
+  z-index: 2;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.split-v {
+  cursor: col-resize;
+  width: 8px;
+}
+.split-h {
+  cursor: row-resize;
+  height: 8px;
+  flex: 0 0 8px;
+}
+.split-v:hover, .split-h:hover,
+.split-v:focus, .split-h:focus,
+.split-v.active, .split-h.active {
+  background: var(--accent-dim);
+  outline: none;
+}
+.split-v::after, .split-h::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
 }
 
 .sidebar {
-  border-right: 1px solid var(--border);
+  border-right: none;
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 72px;
+  width: var(--sidebar-w, 160px);
+  flex: 0 0 var(--sidebar-w, 160px);
+  overflow: hidden;
 }
 .sidebar-head {
   display: flex;
@@ -115,7 +165,13 @@ button.accent:hover:not(:disabled) { border-color: var(--accent); }
 .sidebar-foot { padding: 6px 10px; border-top: 1px solid var(--border); color: var(--text-faint); font-size: 11px; }
 
 /* ---------- editor ---------- */
-.editor-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.editor-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 80px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
 .pane-head {
   display: flex;
   align-items: center;
@@ -183,14 +239,18 @@ button.accent:hover:not(:disabled) { border-color: var(--accent); }
 
 /* ---------- right panel (inspector/docs) ---------- */
 .right-pane {
-  width: 420px;
-  max-width: 60vw;
-  border-left: 1px solid var(--border);
+  width: var(--right-w, 320px);
+  flex: 0 0 var(--right-w, 320px);
+  max-width: none;
+  border-left: none;
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 140px;
+  overflow: hidden;
 }
+.right-pane[hidden], #split-right[hidden] { display: none !important; }
 .right-body { overflow: auto; padding: 10px 12px; flex: 1; font-size: 12px; line-height: 1.6; }
 .right-body h3 { color: var(--accent); font-size: 12px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.06em; }
 .right-body h3:first-child { margin-top: 0; }
@@ -205,11 +265,14 @@ button.accent:hover:not(:disabled) { border-color: var(--accent); }
 
 /* ---------- terminal ---------- */
 .terminal-pane {
-  height: 180px;
-  border-top: 1px solid var(--border);
+  height: var(--term-h, 180px);
+  flex: 0 0 var(--term-h, 180px);
+  border-top: none;
   display: flex;
   flex-direction: column;
   background: var(--bg-panel);
+  min-height: 72px;
+  overflow: hidden;
 }
 .term-tabs { display: flex; gap: 12px; align-items: center; }
 .term-tab { color: var(--text-faint); cursor: pointer; font-size: 11px; }
@@ -284,4 +347,15 @@ button.accent:hover:not(:disabled) { border-color: var(--accent); }
   .right-pane { position: fixed; right: 0; top: 40px; bottom: 0; z-index: 40; width: 88vw; }
   .actions button { padding: 3px 6px; }
   .sep { display: none; }
+}
+}
+  .split-h { height: 12px; }
+}
+
+@media (max-width: 560px) {
+  .workbench {
+    flex-wrap: nowrap;
+  }
+  .brand { display: none; }
+  .topbar { padding: 4px 6px; }
 }

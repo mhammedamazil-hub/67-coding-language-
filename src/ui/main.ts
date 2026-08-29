@@ -31,6 +31,130 @@ const termInput = $<HTMLInputElement>('term-input');
 let settings: Settings = loadSettings();
 const storage = new ProjectStorage();
 
+const LAYOUT = {
+  sidebarMin: 72,
+  sidebarMax: 480,
+  rightMin: 140,
+  rightMax: 720,
+  termMin: 72,
+  termMax: 640,
+  editorMin: 80,
+};
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+function applyLayout(): void {
+  const root = document.documentElement;
+  const sw = clamp(settings.sidebarWidth ?? 160, LAYOUT.sidebarMin, LAYOUT.sidebarMax);
+  const rw = clamp(settings.rightWidth ?? 320, LAYOUT.rightMin, LAYOUT.rightMax);
+  const th = clamp(settings.terminalHeight ?? 180, LAYOUT.termMin, LAYOUT.termMax);
+  root.style.setProperty('--sidebar-w', `${sw}px`);
+  root.style.setProperty('--right-w', `${rw}px`);
+  root.style.setProperty('--term-h', `${th}px`);
+}
+
+function persistLayout(): void {
+  saveSettings(settings);
+}
+
+function pointerPos(e: PointerEvent): { x: number; y: number } {
+  return { x: e.clientX, y: e.clientY };
+}
+
+function bindSplitter(
+  el: HTMLElement,
+  onStart: () => void,
+  onDelta: (dx: number, dy: number) => void,
+): void {
+  let dragging = false;
+  let origin = { x: 0, y: 0 };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    dragging = true;
+    origin = pointerPos(e);
+    onStart();
+    el.classList.add('active');
+    el.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const p = pointerPos(e);
+    onDelta(p.x - origin.x, p.y - origin.y);
+  });
+  const end = (e: PointerEvent) => {
+    if (!dragging) return;
+    dragging = false;
+    el.classList.remove('active');
+    try { el.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+    persistLayout();
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 32 : 8;
+    onStart();
+    if (e.key === 'ArrowLeft') { onDelta(-step, 0); persistLayout(); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { onDelta(step, 0); persistLayout(); e.preventDefault(); }
+    if (e.key === 'ArrowUp') { onDelta(0, -step); persistLayout(); e.preventDefault(); }
+    if (e.key === 'ArrowDown') { onDelta(0, step); persistLayout(); e.preventDefault(); }
+  });
+}
+
+function syncRightSplitter(): void {
+  const pane = $<HTMLElement>('right-pane');
+  const split = $<HTMLElement>('split-right');
+  split.hidden = pane.hidden;
+}
+
+function initLayout(): void {
+  applyLayout();
+  let baseSide = 160;
+  let baseRight = 320;
+  let baseTerm = 180;
+
+  bindSplitter($('split-sidebar'), () => {
+    baseSide = settings.sidebarWidth ?? 160;
+  }, (dx) => {
+    settings.sidebarWidth = clamp(baseSide + dx, LAYOUT.sidebarMin, LAYOUT.sidebarMax);
+    applyLayout();
+  });
+
+  bindSplitter($('split-right'), () => {
+    baseRight = settings.rightWidth ?? 320;
+  }, (dx) => {
+    settings.rightWidth = clamp(baseRight + dx, LAYOUT.rightMin, LAYOUT.rightMax);
+    applyLayout();
+  });
+
+  bindSplitter($('split-term'), () => {
+    baseTerm = settings.terminalHeight ?? 180;
+  }, (_dx, dy) => {
+    settings.terminalHeight = clamp(baseTerm - dy, LAYOUT.termMin, LAYOUT.termMax);
+    applyLayout();
+  });
+
+  $('split-sidebar').addEventListener('dblclick', () => {
+    settings.sidebarWidth = 160;
+    applyLayout();
+    persistLayout();
+  });
+  $('split-right').addEventListener('dblclick', () => {
+    settings.rightWidth = 320;
+    applyLayout();
+    persistLayout();
+  });
+  $('split-term').addEventListener('dblclick', () => {
+    settings.terminalHeight = 180;
+    applyLayout();
+    persistLayout();
+  });
+
+  syncRightSplitter();
+}
+
 interface State {
   files: Record<string, ProjectFile>;
   current: string;
@@ -87,6 +211,7 @@ async function boot(): Promise<void> {
   state.current = state.files['main.67'] ? 'main.67' : Object.keys(state.files)[0];
   renderFileList();
   loadFileIntoEditor(state.current);
+  initLayout();
   bindUI();
   setStatus('Ready · 67 runtime', 'ok');
 }
@@ -315,6 +440,7 @@ function showInspector(): void {
   const body = $<HTMLDivElement>('right-body');
   $<HTMLSpanElement>('right-title').textContent = 'Instruction inspector';
   pane.hidden = false;
+  syncRightSplitter();
   const src = editor.value;
   try {
     const mod: Module = decodeStream(src);
@@ -395,6 +521,7 @@ function showAIChat(): void {
   const pane = $<HTMLElement>('right-pane');
   $<HTMLSpanElement>('right-title').textContent = 'AI Assistant';
   pane.hidden = false;
+  syncRightSplitter();
   
   const body = $<HTMLDivElement>('right-body');
   body.innerHTML = `
@@ -601,6 +728,7 @@ function showDocs(): void {
   const pane = $<HTMLElement>('right-pane');
   $<HTMLSpanElement>('right-title').textContent = 'Docs';
   pane.hidden = false;
+  syncRightSplitter();
   $<HTMLDivElement>('right-body').innerHTML = `<div class="doc">${DOCS_HTML}</div>`;
 }
 
@@ -613,6 +741,19 @@ function showSettings(): void {
     <label style="display:block;margin:8px 0">Editor font size (px)
       <input id="set-font" type="number" min="10" max="24" value="${settings.fontSize}" style="width:80px;margin-left:8px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:3px 6px"/>
     </label>
+    <div style="margin:8px 0;border-top:1px solid var(--border);padding-top:8px">
+      <div style="color:var(--text-dim);margin-bottom:6px">Panel sizes (drag the bars between panes, or set here)</div>
+      <label style="display:block;margin-bottom:6px">Files width
+        <input id="set-side" type="number" min="${LAYOUT.sidebarMin}" max="${LAYOUT.sidebarMax}" value="${settings.sidebarWidth ?? 160}" style="width:80px;margin-left:8px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:3px 6px"/>
+      </label>
+      <label style="display:block;margin-bottom:6px">Inspector width
+        <input id="set-right" type="number" min="${LAYOUT.rightMin}" max="${LAYOUT.rightMax}" value="${settings.rightWidth ?? 320}" style="width:80px;margin-left:8px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:3px 6px"/>
+      </label>
+      <label style="display:block;margin-bottom:6px">Terminal height
+        <input id="set-term" type="number" min="${LAYOUT.termMin}" max="${LAYOUT.termMax}" value="${settings.terminalHeight ?? 180}" style="width:80px;margin-left:8px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:3px 6px"/>
+      </label>
+      <button type="button" id="set-layout-reset">Reset layout</button>
+    </div>
     <div style="margin:8px 0;border-top:1px solid var(--border);padding-top:8px">
       <label style="display:block;margin-bottom:6px">AI Provider
         <select id="set-provider" style="margin-left:8px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);padding:3px 6px">
@@ -647,6 +788,31 @@ function showSettings(): void {
     settings.fontSize = Number((e.target as HTMLInputElement).value) || 14;
     saveSettings(settings);
     renderGutter();
+  };
+  $<HTMLInputElement>('set-side').oninput = (e) => {
+    settings.sidebarWidth = clamp(Number((e.target as HTMLInputElement).value) || 160, LAYOUT.sidebarMin, LAYOUT.sidebarMax);
+    applyLayout();
+    persistLayout();
+  };
+  $<HTMLInputElement>('set-right').oninput = (e) => {
+    settings.rightWidth = clamp(Number((e.target as HTMLInputElement).value) || 320, LAYOUT.rightMin, LAYOUT.rightMax);
+    applyLayout();
+    persistLayout();
+  };
+  $<HTMLInputElement>('set-term').oninput = (e) => {
+    settings.terminalHeight = clamp(Number((e.target as HTMLInputElement).value) || 180, LAYOUT.termMin, LAYOUT.termMax);
+    applyLayout();
+    persistLayout();
+  };
+  $<HTMLButtonElement>('set-layout-reset').onclick = () => {
+    settings.sidebarWidth = 160;
+    settings.rightWidth = 320;
+    settings.terminalHeight = 180;
+    applyLayout();
+    persistLayout();
+    $<HTMLInputElement>('set-side').value = '160';
+    $<HTMLInputElement>('set-right').value = '320';
+    $<HTMLInputElement>('set-term').value = '180';
   };
   
   const updateModels = () => {
@@ -788,7 +954,10 @@ function bindUI(): void {
   $<HTMLButtonElement>('btn-inspect').onclick = showInspector;
   $<HTMLButtonElement>('btn-docs').onclick = showDocs;
   $<HTMLButtonElement>('btn-settings').onclick = showSettings;
-  $<HTMLButtonElement>('btn-close-right').onclick = () => ($<HTMLElement>('right-pane').hidden = true);
+  $<HTMLButtonElement>('btn-close-right').onclick = () => {
+    $<HTMLElement>('right-pane').hidden = true;
+    syncRightSplitter();
+  };
   $<HTMLButtonElement>('modal-close').onclick = closeModal;
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
